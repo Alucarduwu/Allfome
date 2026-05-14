@@ -21,120 +21,143 @@ class PeriodoViewModel(
         }
     }
 
-
-
+    // -------------------------
+    // Fuente única de verdad
+    // -------------------------
     val periodos: StateFlow<List<Periodo>> = repository.obtenerTodosLosPeriodos()
         .onEach { lista ->
             log("📊 periodos Flow -> tamaño=${lista.size}")
-            lista.forEach { log("📄 Periodo -> id=${it.id} | días=${it.diasIncluidos} | ingreso=${it.ingreso}") }
+            lista.forEach { p ->
+                log("📄 Periodo -> id=${p.id} | nombre=${p.nombre} | ${p.fechaInicio}..${p.fechaFin} | ingreso=${p.ingreso}")
+            }
         }
-        .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    private val _periodoSeleccionado = MutableStateFlow<Periodo?>(null)
-    val periodoSeleccionado: StateFlow<Periodo?> = _periodoSeleccionado.asStateFlow()
+    // -------------------------
+    // Selección (solo ID)
+    // -------------------------
+    private val _periodoSeleccionadoId = MutableStateFlow<String?>(null)
+    val periodoSeleccionadoId: StateFlow<String?> = _periodoSeleccionadoId.asStateFlow()
+
+    // Periodo seleccionado derivado de periodos + selectedId (sin loops)
+    val periodoSeleccionado: StateFlow<Periodo?> = combine(periodos, periodoSeleccionadoId) { lista, selectedId ->
+        when {
+            lista.isEmpty() -> null
+            selectedId == null -> lista.firstOrNull()
+            else -> lista.firstOrNull { it.id == selectedId } ?: lista.firstOrNull()
+        }
+    }
+        .distinctUntilChanged()
+        .onEach { sel ->
+            log("✅ periodoSeleccionado derivado -> ${sel?.id} | ${sel?.nombre}")
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    // Ingreso reactivo (para tu circulito)
+    val ingresoPeriodo: StateFlow<Double> = periodoSeleccionado
+        .map { it?.ingreso ?: 0.0 }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0.0)
 
     init {
         log("🚀 Init PeriodoViewModel")
+
+        // Si no hay selección explícita, selecciona el primero cuando lleguen datos
         viewModelScope.launch {
-            periodos.collect { lista ->
-                log("📥 periodos.collect -> recibidos ${lista.size} elementos")
-                if (_periodoSeleccionado.value?.id !in lista.map { it.id }) {
-                    _periodoSeleccionado.value = lista.firstOrNull()
-                    log("🆕 Periodo seleccionado cambiado -> ${_periodoSeleccionado.value}")
-                } else {
-                    val actualizado = lista.find { it.id == _periodoSeleccionado.value?.id }
-                    if (actualizado != null) {
-                        _periodoSeleccionado.value = actualizado
-                        log("♻️ Periodo seleccionado actualizado -> $actualizado")
+            periodos
+                .map { it.firstOrNull()?.id }
+                .filterNotNull()
+                .collect { firstId ->
+                    if (_periodoSeleccionadoId.value == null) {
+                        _periodoSeleccionadoId.value = firstId
+                        log("🆕 Selección inicial automática -> $firstId")
                     }
                 }
-            }
         }
     }
 
-    // ---------- NUEVO: flujo ingreso actualizado --------
-    val ingresoPeriodo: StateFlow<Double> = periodoSeleccionado
-        .map { it?.ingreso ?: 0.0 }
-        .stateIn(viewModelScope, SharingStarted.Lazily, 0.0)
-    // ----------------------------------------------------
+    // -------------------------
+    // Acciones públicas
+    // -------------------------
+    fun seleccionarPeriodo(periodo: Periodo) {
+        log("🔄 seleccionarPeriodo() -> ${periodo.id} | ${periodo.nombre}")
+        _periodoSeleccionadoId.value = periodo.id
+    }
 
-    fun guardarPeriodo(periodo: Periodo, onGuardado: ((String) -> Unit)? = null) {
-        log("💾 guardarPeriodo() -> $periodo")
+    /**
+     * Guardar periodo y obtener ID real.
+     * Ideal para tu "Crear Hoja" porque al final necesitas el id para:
+     * - setHojaId(periodo.id)
+     * - copiarPredeterminadosAHoja(hojaId = periodo.id, ...)
+     */
+    fun guardarPeriodo(periodo: Periodo, onGuardado: ((Periodo) -> Unit)? = null) {
+        val final = if (periodo.id.isBlank()) periodo.copy(id = UUID.randomUUID().toString()) else periodo
 
-        val periodoFinal = if (periodo.id.isBlank()) {
-            periodo.copy(id = UUID.randomUUID().toString())
-        } else periodo
-
-        _periodoSeleccionado.value = periodoFinal
+        log("💾 guardarPeriodo() -> id=${final.id} | nombre=${final.nombre}")
+        _periodoSeleccionadoId.value = final.id
 
         viewModelScope.launch {
-            repository.insertarPeriodo(periodoFinal)
-            log("✅ Periodo guardado en repo -> $periodoFinal")
-            onGuardado?.invoke(periodoFinal.id)
+            repository.insertarPeriodo(final)
+            log("✅ Periodo guardado en repo -> ${final.id}")
+            onGuardado?.invoke(final) // 👈 ya te regresa el objeto final con id
         }
     }
 
     fun actualizarPeriodo(periodo: Periodo) {
-        log("✏️ actualizarPeriodo() -> $periodo")
+        val final = if (periodo.id.isBlank()) periodo.copy(id = UUID.randomUUID().toString()) else periodo
+        log("✏️ actualizarPeriodo() -> ${final.id}")
+
+        _periodoSeleccionadoId.value = final.id
         viewModelScope.launch {
-            repository.insertarPeriodo(periodo)
-            log("✅ Periodo actualizado en repo -> $periodo")
-            _periodoSeleccionado.value = periodo
+            repository.insertarPeriodo(final)
+            log("✅ Periodo actualizado -> ${final.id}")
         }
     }
 
     fun eliminarPeriodo(periodo: Periodo) {
-        log("🗑 eliminarPeriodo() -> $periodo")
+        log("🗑 eliminarPeriodo() -> ${periodo.id}")
         viewModelScope.launch {
             repository.eliminarPeriodo(periodo)
-            log("✅ Periodo eliminado en repo -> $periodo")
-            if (_periodoSeleccionado.value?.id == periodo.id) {
-                _periodoSeleccionado.value = null
-                log("⚠️ Periodo seleccionado reseteado a null")
+            log("✅ Periodo eliminado -> ${periodo.id}")
+
+            // si borraste el seleccionado, selecciona otro o null
+            if (_periodoSeleccionadoId.value == periodo.id) {
+                val siguiente = periodos.value.firstOrNull { it.id != periodo.id }?.id
+                _periodoSeleccionadoId.value = siguiente
+                log("♻️ Selección movida a -> $siguiente")
             }
         }
-    }
-
-    fun seleccionarPeriodo(periodo: Periodo) {
-        log("🔄 seleccionarPeriodo() -> $periodo")
-        _periodoSeleccionado.value = periodo
     }
 
     fun setDiasIncluidos(periodoId: String, dias: List<Int>) {
         log("📆 setDiasIncluidos() -> periodoId=$periodoId | días=$dias")
-        _periodoSeleccionado.value?.let { actual ->
-            if (actual.id == periodoId) {
-                val actualizado = actual.copy(diasIncluidos = dias)
-                actualizarPeriodo(actualizado)
-            }
-        }
+
+        val actual = periodos.value.firstOrNull { it.id == periodoId } ?: return
+        val actualizado = actual.copy(diasIncluidos = dias)
+
+        actualizarPeriodo(actualizado)
     }
 
     fun setIngresoPeriodo(periodoId: String, ingreso: Double) {
         log("💰 setIngresoPeriodo() -> periodoId=$periodoId | ingreso=$ingreso")
+
         viewModelScope.launch {
             repository.actualizarIngreso(periodoId, ingreso)
-            log("✅ Ingreso actualizado en repo para periodo=$periodoId")
+            log("✅ Ingreso actualizado en repo -> periodo=$periodoId")
         }
-        _periodoSeleccionado.value?.let { actual ->
-            if (actual.id == periodoId) {
-                _periodoSeleccionado.value = actual.copy(ingreso = ingreso)
-                log("♻️ Ingreso actualizado en periodo seleccionado")
-            }
+
+        // opcional: optimista (si tu UI lo necesita inmediato)
+        val actual = periodos.value.firstOrNull { it.id == periodoId }
+        if (actual != null) {
+            _periodoSeleccionadoId.value = periodoId
         }
     }
 
     fun setPredeterminadosPeriodo(periodoId: String, seleccion: List<String>) {
         log("🗂 setPredeterminadosPeriodo() -> periodoId=$periodoId | selección=$seleccion")
+
         viewModelScope.launch {
             repository.actualizarPredeterminados(periodoId, seleccion)
-            log("✅ Predeterminados actualizados en repo para periodo=$periodoId")
-        }
-        _periodoSeleccionado.value?.let { actual ->
-            if (actual.id == periodoId) {
-                _periodoSeleccionado.value = actual.copy(predeterminadosUsados = seleccion)
-                log("♻️ Predeterminados actualizados en periodo seleccionado")
-            }
+            log("✅ Predeterminados actualizados en repo -> periodo=$periodoId")
         }
     }
 }

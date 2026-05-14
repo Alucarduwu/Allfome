@@ -12,6 +12,6 @@ data class Gasto(
     val porcentaje: Boolean = false,
     val fecha: Long,
     val esPredeterminado: Boolean = false,
-    val hojaId: String? = null,  // Agrega este campo para soft delete
-    val eliminado: Boolean = false // Ahora puede ser null para gastos globales
+    val hojaId: String? = null,   // null = global / plantilla, no pertenece a una hoja
+    val eliminado: Boolean = false // soft delete
 )
