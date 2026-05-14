@@ -26,9 +26,6 @@ interface GastoDao {
     @Delete
     suspend fun eliminarGasto(gasto: Gasto)
 
-    // Obtención de gastos por hoja y periodo (flujo)
-    @Query("SELECT * FROM gastos WHERE hojaId = :hojaId AND fecha BETWEEN :inicio AND :fin AND eliminado = 0")
-    fun getGastosByHojaYFecha(hojaId: String, inicio: Long, fin: Long): Flow<List<Gasto>>
 
     // Obtención de gastos por hoja y periodo (suspend)
     @Query("SELECT * FROM gastos WHERE hojaId = :hojaId AND fecha BETWEEN :inicio AND :fin AND eliminado = 0")
@@ -38,9 +35,6 @@ interface GastoDao {
     @Query("SELECT COUNT(*) FROM gastos WHERE hojaId = :hojaId AND fecha BETWEEN :inicio AND :fin AND esPredeterminado = 1 AND eliminado = 0")
     suspend fun countGastosPredeterminadosByHojaYFecha(hojaId: String, inicio: Long, fin: Long): Int
 
-    // Gastos predeterminados globales
-    @Query("SELECT * FROM gastos WHERE hojaId = '' AND esPredeterminado = 1 AND eliminado = 0")
-    suspend fun obtenerGastosPredeterminadosGlobales(): List<Gasto>
 
     // Hojas con predeterminados por descripción
     @Query("SELECT DISTINCT hojaId FROM gastos WHERE esPredeterminado = 1 AND descripcion = :descripcion AND hojaId != '' AND eliminado = 0")
@@ -56,10 +50,6 @@ interface GastoDao {
 
     @Query("UPDATE gastos SET eliminado = 1 WHERE hojaId = :hojaId AND fecha BETWEEN :inicio AND :fin")
     suspend fun marcarGastosPorRangoYHojaComoEliminados(hojaId: String, inicio: Long, fin: Long)
-
-    // Predeterminados por hoja y periodo
-    @Query("SELECT * FROM gastos WHERE hojaId = :hojaId AND fecha BETWEEN :inicio AND :fin AND esPredeterminado = 1 AND eliminado = 0")
-    suspend fun obtenerGastosPredeterminadosPorHojaYPeriodo(hojaId: String, inicio: Long, fin: Long): List<Gasto>
 
     // Actualizar predeterminados por descripción
     @Query("UPDATE gastos SET monto = :nuevoMonto, porcentaje = :nuevoPorcentaje, eliminado = 0 WHERE descripcion = :descripcion AND esPredeterminado = 1 AND hojaId != ''")
@@ -77,5 +67,33 @@ interface GastoDao {
 
     @Query("SELECT DISTINCT hojaId FROM gastos WHERE hojaId != ''")
     suspend fun obtenerTodasLasHojas(): List<String>
+    // Globales: acepta hojaId NULL o ""
+    @Query("""
+    SELECT * FROM gastos
+    WHERE (hojaId IS NULL OR hojaId = '')
+      AND esPredeterminado = 1
+      AND eliminado = 0
+    ORDER BY descripcion COLLATE NOCASE
+""")
+    suspend fun obtenerGastosPredeterminadosGlobales(): List<Gasto>
+
+    // Por hoja: asegura que NO agarre los globales
+    @Query("""
+    SELECT * FROM gastos
+    WHERE hojaId = :hojaId
+      AND fecha BETWEEN :inicio AND :fin
+      AND eliminado = 0
+""")
+    fun getGastosByHojaYFecha(hojaId: String, inicio: Long, fin: Long): Flow<List<Gasto>>
+
+    @Query("""
+    SELECT * FROM gastos
+    WHERE hojaId = :hojaId
+      AND fecha BETWEEN :inicio AND :fin
+      AND esPredeterminado = 1
+      AND eliminado = 0
+    ORDER BY descripcion COLLATE NOCASE
+""")
+    suspend fun obtenerGastosPredeterminadosPorHojaYPeriodo(hojaId: String, inicio: Long, fin: Long): List<Gasto>
 
 }

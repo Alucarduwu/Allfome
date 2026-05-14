@@ -9,9 +9,12 @@ data class Periodo(
     val nombre: String,
     val fechaInicio: Long,
     val fechaFin: Long,
-    val diasIncluidos: List<Int>, // 0=Domingo, 1=Lunes...
+
+    // ⚠️ En tu app tú lo usas como "día del mes" (1..31), NO como 0=Domingo.
+    val diasIncluidos: List<Int>,
+
     val ingreso: Double = 0.0,
-    val predeterminadosUsados: List<String> = emptyList() // IDs de gastos predeterminados
+
+    // IDs de predeterminados globales elegidos al crear la hoja (solo historial)
+    val predeterminadosUsados: List<String> = emptyList()
 )
-
-

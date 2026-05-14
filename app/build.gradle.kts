@@ -1,15 +1,13 @@
-
-
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
-    alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.compose.compiler)
     id("org.jetbrains.kotlin.kapt")
 }
 
 android {
     namespace = "com.example.allofme"
-    compileSdk = 35
+    compileSdk = 34
 
     defaultConfig {
         applicationId = "com.example.allofme"
@@ -17,7 +15,6 @@ android {
         targetSdk = 35
         versionCode = 1
         versionName = "1.0"
-
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -31,32 +28,29 @@ android {
         }
     }
 
-    compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_11
-        targetCompatibility = JavaVersion.VERSION_11
-    }
-
-    kotlinOptions {
-        jvmTarget = "11"
-    }
-
     buildFeatures {
         compose = true
     }
 
-    buildToolsVersion = "35.0.0"
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    kotlinOptions {
+        jvmTarget = "17"
+    }
 }
 
 dependencies {
+
     // Core
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.navigation.compose)
-    implementation (libs.androidx.core.ktx.v1120)
 
-
-    // Jetpack Compose
+    // Compose
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.ui)
     implementation(libs.androidx.ui.graphics)
@@ -67,22 +61,17 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.lifecycle.viewmodel.ktx)
     implementation(libs.androidx.lifecycle.livedata.ktx)
-    implementation(libs.androidx.foundation.layout) // Esto es Kotlin DSL
 
-
-
-
-
-    // DataStore Preferences
+    // DataStore
     implementation(libs.androidx.datastore.preferences)
 
-    // Room Database
+    // Room
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
-    implementation (libs.androidx.lifecycle.runtime.compose.v262)
+    kapt(libs.androidx.room.compiler)
 
-    // (Opcional) Gráficas para progreso o estadísticas
-    implementation(libs.compose)
+    // WorkManager
+    implementation(libs.androidx.work.ktx)
 
     // Testing
     testImplementation(libs.junit)
@@ -92,10 +81,4 @@ dependencies {
     androidTestImplementation(libs.androidx.ui.test.junit4)
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
-    kapt(libs.androidx.room.compiler)
-    implementation ("androidx.work:work-runtime-ktx:2.8.1")
-
-
-
-
 }
